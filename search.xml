@@ -83,6 +83,27 @@
     </entry>
     
     
+    
+    <entry>
+      <title>STM32cubemx中因no debug导致的工程不能重复烧入的解决办法</title>
+      <link href="/2022/06/03/Debug%E5%AF%BC%E8%87%B4%E7%9A%84%E5%B7%A5%E7%A8%8B%E4%B8%8D%E8%83%BD%E9%87%8D%E5%A4%8D%E7%83%A7%E5%85%A5%E7%9A%84%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95/"/>
+      <url>/2022/06/03/Debug%E5%AF%BC%E8%87%B4%E7%9A%84%E5%B7%A5%E7%A8%8B%E4%B8%8D%E8%83%BD%E9%87%8D%E5%A4%8D%E7%83%A7%E5%85%A5%E7%9A%84%E8%A7%A3%E5%86%B3%E5%8A%9E%E6%B3%95/</url>
+      
+        <content type="html"><![CDATA[<p>​暴雨天，突感一阵寒意，喝了口快乐水，大脑愈发精神，于是又敲起键盘，打下些令正人君子深恶痛绝的文字。</p><hr><h3 id="在cubeMX中No-Debug导致的工程不能重复烧入的解决办法"><a href="#在cubeMX中No-Debug导致的工程不能重复烧入的解决办法" class="headerlink" title="在cubeMX中No Debug导致的工程不能重复烧入的解决办法"></a><strong>在cubeMX中No Debug导致的工程不能重复烧入的解决办法</strong></h3><p>​试烧了一个点亮led的程序后，再次烧入就行不通了，无论怎么检查，通电，设置都没问题，而仿真器无法连接，无法下载。</p><p>显示：<code>Error: Flash Download failed  -  Target DLL has been cancelled</code></p><p>​板子似乎和废铁一样了（悲</p><p>查找资料后知道了问题所在</p><ul><li><h4 id="stm32一共有三种启动模式，对应的储存介质是芯片内置的，他们是："><a href="#stm32一共有三种启动模式，对应的储存介质是芯片内置的，他们是：" class="headerlink" title="stm32一共有三种启动模式，对应的储存介质是芯片内置的，他们是："></a>stm32一共有三种启动模式，对应的储存介质是芯片内置的，他们是：</h4><p>1.用户闪存 &#x3D; 芯片内置的Flash。</p><p>2.SRAM &#x3D; 芯片内置的RAM区，就是内存啦。</p><p>3.系统存储器 &#x3D; 芯片内部一块特定的区域，芯片出厂时在这个区域预置了一段Bootloader，就是通常说的ISP程序。</p><p>这个区域的内容在芯片出厂后没有人能够修改或擦除，即它是一个ROM区。</p><p>在每个STM32的芯片上都有两个管脚BOOT0和BOOT1，这两个管脚在芯片复位时的电平状态决定了芯片复位后从哪个区域开始执行程序，见下表：</p><p>BOOT1&#x3D;x   BOOT0&#x3D;0   从用户闪存启动，这是正常的工作模式。</p><p>BOOT1&#x3D;0   BOOT0&#x3D;1   从系统存储器启动，这种模式启动的程序功能由厂家设置。</p><p>BOOT1&#x3D;1   BOOT0&#x3D;1   从内置SRAM启动，这种模式可以用于调试。</p><p>一般BOOT0和BOOT1跳线都跳到0(地)</p></li><li><p><u>下载出错的原因就在于使用库函数或者Cube MX对端口初始化时如不特别指定会默认将SWCLK和SWDIO对应的端口释放为普通IO口，这样再次下载时就无法使用这两个端口的SW-DP功能，也就会产生各种错误</u></p></li></ul><h4 id="解决办法："><a href="#解决办法：" class="headerlink" title="解决办法："></a>解决办法：</h4><p>（1）把启动模式改成RAM启动，就是<code>BOOT1</code>和<code>BOOT0</code>都接高，再在keil中下载，这时是成功的。</p><p>（2）把启动模式改回去，再下载（这时的代码应该是在MX中Debug打开的），就可以了。</p>]]></content>
+      
+      
+      
+        <tags>
+            
+            <tag> STM32 </tag>
+            
+            <tag> HAL </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
   
   
 </search>
