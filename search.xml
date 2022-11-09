@@ -4,6 +4,27 @@
   
     
     <entry>
+      <title>STM32中断中使用HAL_Delay引起的死机分析及其解决方案</title>
+      <link href="/2022/11/09/STM32%E4%B8%AD%E6%96%AD%E4%B8%AD%E4%BD%BF%E7%94%A8HAL-Delay%E5%BC%95%E8%B5%B7%E7%9A%84%E6%AD%BB%E6%9C%BA%E5%88%86%E6%9E%90%E5%8F%8A%E5%85%B6%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/"/>
+      <url>/2022/11/09/STM32%E4%B8%AD%E6%96%AD%E4%B8%AD%E4%BD%BF%E7%94%A8HAL-Delay%E5%BC%95%E8%B5%B7%E7%9A%84%E6%AD%BB%E6%9C%BA%E5%88%86%E6%9E%90%E5%8F%8A%E5%85%B6%E8%A7%A3%E5%86%B3%E6%96%B9%E6%A1%88/</url>
+      
+        <content type="html"><![CDATA[<h2 id="问题"><a href="#问题" class="headerlink" title="问题"></a>问题</h2><p>在使用按键配置外部中断时，使用HAL_Delay函数进行延时消抖，当进入中断时程序卡死无反应，去除HAL_Delay后恢复正常</p><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">HAL_GPIO_EXTI_Callback</span><span class="params">(<span class="type">uint16_t</span> GPIO_Pin)</span></span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(GPIO_Pin==KEY1_Pin)</span><br><span class="line">  &#123;</span><br><span class="line">    HAL_Delay(<span class="number">20</span>);<span class="comment">/* 延时一小段时间，消除抖动 */</span></span><br><span class="line"><span class="keyword">if</span>(HAL_GPIO_ReadPin(KEY1_GPIO_Port,KEY1_Pin)==<span class="number">1</span>)</span><br><span class="line">    &#123;</span><br><span class="line">HAL_Delay(<span class="number">20</span>);</span><br><span class="line"><span class="keyword">if</span>(HAL_GPIO_ReadPin(KEY1_GPIO_Port,KEY1_Pin)==<span class="number">1</span>)</span><br><span class="line">&#123;</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;KEY=1\n&quot;</span>);</span><br><span class="line"></span><br><span class="line">&#125;</span><br><span class="line">     </span><br><span class="line">    &#125;</span><br><span class="line">    __HAL_GPIO_EXTI_CLEAR_IT(GPIO_Pin);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure><h2 id="原因"><a href="#原因" class="headerlink" title="原因"></a>原因</h2><p>查看HAL_Delay相关程序发现，HAL_Delay是通过滴答定时器的中断进行延迟。</p><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment">  * @brief This function provides minimum delay (in milliseconds) based</span></span><br><span class="line"><span class="comment">  *        on variable incremented.</span></span><br><span class="line"><span class="comment">  * @note In the default implementation , SysTick timer is the source of time base.</span></span><br><span class="line"><span class="comment">  *       It is used to generate interrupts at regular time intervals where uwTick</span></span><br><span class="line"><span class="comment">  *       is incremented.</span></span><br><span class="line"><span class="comment">  * @note This function is declared as __weak to be overwritten in case of other</span></span><br><span class="line"><span class="comment">  *       implementations in user file.</span></span><br><span class="line"><span class="comment">  * @param Delay specifies the delay time length, in milliseconds.</span></span><br><span class="line"><span class="comment">  * @retval None</span></span><br><span class="line"><span class="comment">  */</span></span><br><span class="line">__weak <span class="type">void</span> <span class="title function_">HAL_Delay</span><span class="params">(<span class="type">uint32_t</span> Delay)</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="type">uint32_t</span> tickstart = HAL_GetTick();</span><br><span class="line">  <span class="type">uint32_t</span> wait = Delay;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/* Add a freq to guarantee minimum wait */</span></span><br><span class="line">  <span class="keyword">if</span> (wait &lt; HAL_MAX_DELAY)</span><br><span class="line">  &#123;</span><br><span class="line">    wait += (<span class="type">uint32_t</span>)(uwTickFreq);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">while</span> ((HAL_GetTick() - tickstart) &lt; wait)</span><br><span class="line">  &#123;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure><p>进而查找滴答定时器相关初始化发现，在程序初始化时<strong>默认把滴答定时器的中断优先级设为最低</strong>。</p><p><img src="https://s2.loli.net/2022/11/09/pTKfh4Vb8ZCJnEz.png" alt="默认初始化"></p><h2 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h2><p>我们可以在main的初始化后里加上如下指令把滴答定时器优先级调为最高，问题解决。</p><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">HAL_NVIC_SetPriority(SysTick_IRQn,<span class="number">0</span>,<span class="number">0U</span>);</span><br></pre></td></tr></table></figure>]]></content>
+      
+      
+      
+        <tags>
+            
+            <tag> STM32 </tag>
+            
+            <tag> HAL </tag>
+            
+        </tags>
+      
+    </entry>
+    
+    
+    
+    <entry>
       <title>MATLAB学习日记（1）</title>
       <link href="/2022/11/05/MATLAB%E5%AD%A6%E4%B9%A0%E6%97%A5%E8%AE%B0%EF%BC%881%EF%BC%89/"/>
       <url>/2022/11/05/MATLAB%E5%AD%A6%E4%B9%A0%E6%97%A5%E8%AE%B0%EF%BC%881%EF%BC%89/</url>
@@ -28,6 +49,8 @@
         <tags>
             
             <tag> 数学建模 </tag>
+            
+            <tag> LINGO </tag>
             
         </tags>
       
